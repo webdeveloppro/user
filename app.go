@@ -8,8 +8,6 @@ import (
 	"time"
 
 	"github.com/gorilla/mux"
-	_ "github.com/lib/pq"
-
 	v "github.com/webdeveloppro/validating"
 )
 
@@ -45,7 +43,7 @@ func (a *App) Run(addr string) {
 		addr = "8000"
 	}
 
-	log.Fatal(http.ListenAndServe(":8000", a.Router))
+	log.Fatal(http.ListenAndServe(":"+addr, a.Router))
 }
 
 // initializeRoutes - creates routers, runs automatically in Initialize
@@ -74,7 +72,7 @@ func (a *App) login(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if len(errors) > 0 {
-		respondWithJSON(w, http.StatusBadRequest, errors)
+		respondWithJSON(w, r, http.StatusBadRequest, errors)
 		return
 	}
 
@@ -83,15 +81,15 @@ func (a *App) login(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if len(errors) > 0 {
-		respondWithJSON(w, http.StatusBadRequest, errors)
+		respondWithJSON(w, r, http.StatusBadRequest, errors)
 		return
 	}
 
-	respondWithJSON(w, 200, u)
+	respondWithJSON(w, r, 200, u)
 }
 
 func (a *App) loginOptions(w http.ResponseWriter, r *http.Request) {
-	respondWithJSON(w, 200, map[string]map[string]string{
+	respondWithJSON(w, r, 200, map[string]map[string]string{
 		"email":    map[string]string{"type": "string", "required": "1", "maxLength": "255"},
 		"password": map[string]string{"type": "password", "required": "1", "maxLength": "255"},
 	})
@@ -126,7 +124,7 @@ func (a *App) signup(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if len(errs) > 0 {
-		respondWithJSON(w, http.StatusBadRequest, errs.JSONErrors())
+		respondWithJSON(w, r, http.StatusBadRequest, errs.JSONErrors())
 		return
 	}
 
@@ -136,33 +134,44 @@ func (a *App) signup(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if len(errs) > 0 {
-		respondWithJSON(w, http.StatusBadRequest, errs.JSONErrors())
+		respondWithJSON(w, r, http.StatusBadRequest, errs.JSONErrors())
 	} else {
-		respondWithJSON(w, http.StatusCreated, map[string]int32{"id": u.ID})
+		respondWithJSON(w, r, http.StatusCreated, map[string]int32{"id": u.ID})
 	}
 }
 
 func (a *App) signupOptions(w http.ResponseWriter, r *http.Request) {
-	respondWithJSON(w, 200, map[string]map[string]string{
+	respondWithJSON(w, r, 200, map[string]map[string]string{
 		"email":     map[string]string{"type": "string", "required": "1", "maxLength": "255"},
 		"password":  map[string]string{"type": "password", "required": "1", "maxLength": "255"},
 		"password2": map[string]string{"type": "password", "required": "1", "maxLength": "255"},
 	})
 }
 
-func respondWithError(w http.ResponseWriter, code int, message string) {
-	respondWithJSON(w, code, map[string]string{"error": message})
+func respondWithError(w http.ResponseWriter, r *http.Request, code int, message string) {
+	respondWithJSON(w, r, code, map[string]string{"error": message})
 }
 
-func respondWithJSON(w http.ResponseWriter, code int, payload interface{}) {
+func respondWithJSON(w http.ResponseWriter, r *http.Request, code int, payload interface{}) {
 	response, err := json.Marshal(payload)
 
 	if err != nil {
 		log.Fatalf("Cannot convert data to json, %v", err)
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	w.Header().Set("Access-Control-Allow-Origin", "*")
+	if origin := r.Header.Get("Origin"); origin != "" {
+		w.Header().Set("Access-Control-Allow-Origin", origin)
+		w.Header().Set("Access-Control-Allow-Methods", "POST, GET, OPTIONS, PUT, DELETE")
+		w.Header().Set("Access-Control-Allow-Headers",
+			"Accept, Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization, X-REAL")
+		w.Header().Set("Content-Type", "application/json")
+	}
+
+	// Stop here if its Preflighted OPTIONS request
+	if r.Method == "OPTIONS" && r.Header.Get("Accept") == "*/*" {
+		return
+	}
+
 	respondWithBytes(w, code, response)
 }
 

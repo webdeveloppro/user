@@ -4,6 +4,8 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
+
+	_ "github.com/lib/pq"
 )
 
 // Storage provider that can handle read/write operation to database/file/bytes
@@ -18,7 +20,7 @@ type PGStorage struct {
 }
 
 // NewPostgres will open db connection or return error
-func NewPostgres(host, user, password, dbname string) (pg *PGStorage, err error) {
+func NewPostgres(host, user, password, dbname string) (pg PGStorage, err error) {
 
 	if host == "" {
 		log.Fatal("Empty host string, setup DB_HOST env")

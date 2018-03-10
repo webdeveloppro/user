@@ -76,6 +76,14 @@ func checkResponseCode(t *testing.T, expected int, response *httptest.ResponseRe
 	}
 }
 
+func TestLoginOptions(t *testing.T) {
+	a := SetUp(t)
+
+	req, _ := http.NewRequest("OPTIONS", "/login", nil)
+	response := executeRequest(a, req)
+	checkResponseCode(t, 200, response, req)
+}
+
 func TestSignUpFail(t *testing.T) {
 
 	a := SetUp(t)
@@ -128,6 +136,14 @@ func TestSignUpFail(t *testing.T) {
 			t.Errorf("Expected %s but got '%s'", test.resp, body)
 		}
 	}
+}
+
+func TestSignUpOptions(t *testing.T) {
+	a := SetUp(t)
+
+	req, _ := http.NewRequest("OPTIONS", "/signup", nil)
+	response := executeRequest(a, req)
+	checkResponseCode(t, 200, response, req)
 }
 
 func TestSignUpSuccess(t *testing.T) {
