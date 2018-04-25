@@ -117,7 +117,7 @@ func TestRegister(t *testing.T) {
 				Email:    "new@user.com",
 				Password: "123123",
 			},
-			body: `{"token":"65794a68624763694f694a49557a49314e694973496e523563434936496b705856434a392e65794a6c654841694f6a45314d4441774c434a7063334d694f694a755a58644164584e6c6369356a6232306966512e423064684e5450495f6d724138317a47346e7a7a357a32546a444541383348573461526e695a5679733155"}`,
+			body: `{"token":"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJlbWFpbCI6Im5ld0B1c2VyLmNvbSIsImZpcnN0X25hbWUiOiIiLCJsYXN0X25hbWUiOiIifQ.knY8cZ7UbOYaQHwaqJKQejiQIieyROibKZihLY4iQNk"}`,
 			code: 201,
 		},
 	}
@@ -211,7 +211,7 @@ func TestLogin(t *testing.T) {
 				Email:    "exist@user.com",
 				Password: "123123",
 			},
-			body: `{"token":"65794a68624763694f694a49557a49314e694973496e523563434936496b705856434a392e65794a6c654841694f6a45314d4441774c434a7063334d694f694a6c65476c7a64454231633256794c6d4e7662534a392e794f6a6a384b3171486559456d52505f7855526b483267384855483455746576436d694d5a555732314177"}`,
+			body: `{"token":"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJlbWFpbCI6ImV4aXN0QHVzZXIuY29tIiwiZmlyc3RfbmFtZSI6IiIsImxhc3RfbmFtZSI6IiJ9.qDDYj2lOcom9KNF06GxOygc9QJ-7W47GPLnkCHl5fDI"}`,
 			code: 200,
 		},
 	}
@@ -236,6 +236,67 @@ func TestLoginOptions(t *testing.T) {
 	a := SetUp(t)
 
 	req, _ := http.NewRequest("OPTIONS", "/login", nil)
+	response := executeRequest(a, req)
+	checkResponseCode(t, 200, response, req)
+}
+
+func TestProfile(t *testing.T) {
+
+	type ProfileStruct struct {
+		name  string
+		token string
+		body  string
+		code  int
+	}
+
+	u := User{}
+	u.Email = "new@email.com"
+	token, _ := u.generateToken()
+
+	a := SetUp(t)
+	tests := []ProfileStruct{
+		ProfileStruct{
+			name:  "Without token",
+			token: "",
+			body:  `{"error":"Authorization"}`,
+			code:  401,
+		},
+		ProfileStruct{
+			name:  "Wrong token",
+			token: "123123",
+			body:  `{"error":"token contains an invalid number of segments"}`,
+			code:  401,
+		},
+		ProfileStruct{
+			name:  "Success requests",
+			token: token,
+			body:  `{"email":"` + u.Email + `","first_name":"","last_name":""}`,
+			code:  200,
+		},
+	}
+
+	for _, test := range tests {
+		req, _ := http.NewRequest("GET", "/profile", nil)
+
+		if test.token != "" {
+			req.Header.Set("Authorization", test.token)
+		}
+
+		response := executeRequest(a, req)
+
+		// checkResponseCode(t, test.code, response, req)
+
+		if body := response.Body.String(); body != test.body {
+			t.Errorf("%s, Expected '%s' but got '%s'", test.name, test.body, body)
+			return
+		}
+	}
+}
+
+func TestProfileOptions(t *testing.T) {
+	a := SetUp(t)
+
+	req, _ := http.NewRequest("OPTIONS", "/profile", nil)
 	response := executeRequest(a, req)
 	checkResponseCode(t, 200, response, req)
 }

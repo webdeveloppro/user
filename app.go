@@ -3,12 +3,8 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"io"
 	"log"
 	"net/http"
-	"os"
-	"strconv"
-	"strings"
 
 	"github.com/jackc/pgx"
 
@@ -47,9 +43,8 @@ func (a *App) initializeRoutes() {
 	a.Router.HandleFunc("/login", a.loginOptions).Methods("OPTIONS")
 	a.Router.HandleFunc("/register", a.register).Methods("POST")
 	a.Router.HandleFunc("/register", a.registerOptions).Methods("OPTIONS")
-	a.Router.HandleFunc("/files/{fileName}", a.uploadFile).Methods("PUT")
-	a.Router.HandleFunc("/files/{fileName}", a.getFile).Methods("GET")
-	a.Router.HandleFunc("/files/{fileName}", a.deleteFile).Methods("DELETE")
+	a.Router.HandleFunc("/profile", a.profile).Methods("GET")
+	a.Router.HandleFunc("/profile", a.profileOptions).Methods("OPTIONS")
 }
 
 // login function return token in success
@@ -104,7 +99,7 @@ func (a *App) loginOptions(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// register function, return 204 in success
+// register function, return jwt token in success
 func (a *App) register(w http.ResponseWriter, r *http.Request) {
 	u := User{}
 
@@ -156,7 +151,7 @@ func (a *App) register(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		res := map[string]string{"token": t}
-		respondWithJSON(w, r, 201, res)
+		respondWithJSON(w, r, http.StatusCreated, res)
 	}
 }
 
@@ -168,116 +163,37 @@ func (a *App) registerOptions(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// uploadFile function return 201 in success
-func (a *App) uploadFile(w http.ResponseWriter, r *http.Request) {
+// profile function, return user data in success
+func (a *App) profile(w http.ResponseWriter, r *http.Request) {
 
-	if requireToken(w, r) == false {
+	u := User{}
+	token := r.Header.Get("Authorization")
+	if token == "" {
+		respondWithError(w, r, http.StatusUnauthorized, "Authorization")
 		return
 	}
 
-	vars := mux.Vars(r)
-	Filename := vars["fileName"]
-	if suspiciousFileName(Filename) {
-		respondWithBytes(w, http.StatusServiceUnavailable, nil)
-	}
-
-	f, err := os.OpenFile("./content/"+Filename, os.O_WRONLY|os.O_CREATE, 0666)
+	res, err := u.InvalidToken(token)
 	if err != nil {
-		log.Printf("Cannot open file, %v", err)
-		respondWithJSON(w, r, http.StatusInternalServerError, "Please try again in a few minutes")
-		return
-	}
-	defer f.Close()
-	io.Copy(f, r.Body)
-
-	w.Header().Set("Location", "/content/"+Filename)
-	respondWithJSON(w, r, http.StatusCreated, []string{})
-}
-
-// getFile function return 200 and file type and file content in success
-func (a *App) getFile(w http.ResponseWriter, r *http.Request) {
-
-	if requireToken(w, r) == false {
+		respondWithError(w, r, http.StatusForbidden, fmt.Sprintf("%v", err))
 		return
 	}
 
-	vars := mux.Vars(r)
-	Filename := vars["fileName"]
-	if suspiciousFileName(Filename) {
-		respondWithBytes(w, http.StatusServiceUnavailable, nil)
-	}
-
-	f, err := os.Open("./content/" + Filename)
-	defer f.Close()
-	if err != nil {
-		respondWithBytes(w, http.StatusNotFound, []byte("File not found"))
+	if res == false {
+		respondWithError(w, r, http.StatusForbidden, "invalid token")
 		return
 	}
 
-	FileHeader := make([]byte, 512)
-	f.Read(FileHeader)
-	FileContentType := http.DetectContentType(FileHeader)
-
-	FileStat, _ := f.Stat()                            //Get info from file
-	FileSize := strconv.FormatInt(FileStat.Size(), 10) //Get file size as a string
-
-	w.Header().Set("Content-Disposition", "attachment; filename="+Filename)
-	w.Header().Set("Content-Type", FileContentType)
-	w.Header().Set("Content-Length", FileSize)
-
-	//Send the file
-	//We read 512 bytes from the file already so we reset the offset back to 0
-	f.Seek(0, 0)
-	io.Copy(w, f)
-	w.WriteHeader(http.StatusAccepted)
+	respondWithJSON(w, r, http.StatusOK, map[string]interface{}{"email": u.Email, "first_name": "", "last_name": ""})
 	return
 }
 
-// deleteFile function return 204 in success
-func (a *App) deleteFile(w http.ResponseWriter, r *http.Request) {
-
-	if requireToken(w, r) == false {
-		return
-	}
-
-	vars := mux.Vars(r)
-	Filename := vars["fileName"]
-	if suspiciousFileName(Filename) {
-		respondWithBytes(w, http.StatusServiceUnavailable, nil)
-	}
-
-	err := os.Remove("./content/" + Filename)
-	if err != nil {
-		respondWithBytes(w, http.StatusNotFound, []byte("File not found"))
-		return
-	}
-
-	respondWithBytes(w, http.StatusNoContent, nil)
-	return
-}
-
-// requireToken check if request have Authorization token
-func requireToken(w http.ResponseWriter, r *http.Request) bool {
-	if InvalidToken(r.Header.Get("Authorization")) {
-		respondWithJSON(w, r, http.StatusForbidden, map[string]string{"__error__": "Token is required"})
-		return false
-	}
-	return true
-}
-
-// suspiciousFileName is a protection from hacks and scripts execution
-// If file looks suspicious function will return true
-func suspiciousFileName(Filename string) bool {
-	disallowedNames := []string{"../", "`", "\n"}
-	for _, d := range disallowedNames {
-		if strings.Contains(d, Filename) {
-			return true
-		}
-	}
-	if len(Filename) > 255 {
-		return true
-	}
-	return false
+// register options function - for frontend validation rules
+func (a *App) profileOptions(w http.ResponseWriter, r *http.Request) {
+	respondWithJSON(w, r, 200, map[string]map[string]string{
+		"email":    map[string]string{"type": "string", "required": "1", "minLength": "4", "maxLength": "255"},
+		"password": map[string]string{"type": "password", "required": "1", "minLength": "8", "maxLength": "255"},
+	})
 }
 
 // respondWithError return error code and message

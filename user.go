@@ -21,19 +21,20 @@ type User struct {
 
 // GetToken will return X-Session token
 func (u *User) GetToken() (string, error) {
-	byteToken, err := u.generateToken()
+	stringToken, err := u.generateToken()
 	if err != nil {
 		return "", errors.Wrapf(err, "user: cannot generate jwt token")
 	}
 
-	return fmt.Sprintf("%x", byteToken[:]), nil
+	return stringToken, nil
 }
 
 // generateToken will generate token and return byte array
 func (u *User) generateToken() (string, error) {
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.StandardClaims{
-		ExpiresAt: 15000,
-		Issuer:    u.Email,
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+		"email":      u.Email,
+		"first_name": "",
+		"last_name":  "",
 	})
 
 	// Sign and get the complete encoded token as a string using the secret
@@ -41,7 +42,28 @@ func (u *User) generateToken() (string, error) {
 }
 
 // InvalidToken will check if user have valid token
-func InvalidToken(token string) bool {
+func (u *User) InvalidToken(tokenString string) (bool, error) {
+	token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
+		// Don't forget to validate the alg is what you expect:
+		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, fmt.Errorf("Unexpected signing method: %v", token.Header["alg"])
+		}
+
+		// hmacSecret is a []byte containing your secret, e.g. []byte("my_secret_key")
+		return hmacSecret, nil
+	})
+
+	if err != nil {
+		return false, err
+	}
+
+	claims, ok := token.Claims.(jwt.MapClaims)
+
+	if ok && token.Valid {
+		u.Email = claims["email"].(string)
+		return true, nil
+	}
+
 	// Since we don't have any instruction for the token i assume if token is not empty its valid
-	return token == ""
+	return false, nil
 }
