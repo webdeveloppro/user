@@ -1,6 +1,7 @@
 package main
 
 import (
+	"regexp"
 	"testing"
 )
 
@@ -16,5 +17,41 @@ func TestGetToken(t *testing.T) {
 
 	if token != expectedToken {
 		t.Errorf("Get Token return wrong result, expected: %s, got: %s", expectedToken, token)
+	}
+}
+
+func TestEmailRegex(t *testing.T) {
+	reg := "(^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\\.[a-zA-Z0-9-.]+$)"
+
+	tests := []struct {
+		email string
+		res   bool
+	}{
+		{
+			"wrong",
+			false,
+		}, {
+			"d@d.d",
+			true,
+		}, {
+			"t@t",
+			false,
+		}, {
+			"v@v.fl",
+			true,
+		}, {
+			"vlad@webdeve.pro",
+			true,
+		}, {
+			"adgasg@asdgasgadgasdg_asdgasg",
+			false,
+		},
+	}
+
+	for _, test := range tests {
+		matched, _ := regexp.MatchString(reg, test.email)
+		if matched != test.res {
+			t.Errorf("%s expected: %t got %t", test.email, test.res, matched)
+		}
 	}
 }

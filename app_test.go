@@ -193,7 +193,7 @@ func TestLogin(t *testing.T) {
 				Email:    "",
 				Password: "",
 			},
-			body: `{"email":["email cannot be empty"],"password":["password cannot be empty"]}`,
+			body: `{"email":["cannot be empty"],"password":["cannot be empty"]}`,
 			code: 400,
 		},
 		FakeStorage{

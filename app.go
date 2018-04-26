@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"regexp"
 
 	"github.com/jackc/pgx"
 
@@ -57,37 +58,46 @@ func (a *App) login(w http.ResponseWriter, r *http.Request) {
 		log.Fatalf("cannot decode signup body: %v", err)
 	}
 
-	errors := make(map[string][]string, 0)
-	if u.Email == "" {
-		errors["email"] = append(errors["email"], "email cannot be empty")
-	}
-	if u.Password == "" {
-		errors["password"] = append(errors["password"], "password cannot be empty")
-	}
+	// do validation by funcValidator
+	emailValidator := v.FromFunc(func(field v.Field) v.Errors {
+		val := field.ValuePtr.(*string)
+		matched, err := regexp.MatchString("(^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\\.[a-zA-Z0-9-.]+$)", *val)
+		if err != nil {
+			return v.NewErrors("email", v.ErrInvalid, fmt.Sprint(err))
+		}
+		if matched == false {
+			return v.NewErrors("email", v.ErrInvalid, "Wrong email")
+		}
+		return nil
+	})
 
-	if len(errors) > 0 {
-		respondWithJSON(w, r, http.StatusBadRequest, errors)
+	errs := v.Validate(v.Schema{
+		v.F("email", &u.Email):       v.All(v.Nonzero("cannot be empty"), v.Len(4, 120, "length is not between 4 and 120"), emailValidator),
+		v.F("password", &u.Password): v.All(v.Nonzero("cannot be empty"), v.Len(4, 120, "length is not between 8 and 120")),
+	})
+
+	if len(errs) > 0 {
+		respondWithJSON(w, r, http.StatusBadRequest, errs.JSONErrors())
 		return
 	}
 
 	if err := a.Storage.GetUserByEmail(&u); err != nil {
-		errors["__error__"] = append(errors["__error__"], "email or password do not match")
+		errs.Append(v.NewError("__error__", v.ErrInvalid, "email or password do not match"))
 	}
 
-	if len(errors) > 0 {
-		respondWithJSON(w, r, http.StatusBadRequest, errors)
+	if len(errs) > 0 {
+		respondWithJSON(w, r, http.StatusBadRequest, errs.JSONErrors())
 		return
 	}
 
 	t, err := u.GetToken()
 	if err != nil {
-		errors["__error__"] = append(errors["__error__"], fmt.Sprintf("%v", err))
-		respondWithJSON(w, r, http.StatusBadRequest, errors)
+		errs.Append(v.NewError("__error__", v.ErrInvalid, fmt.Sprintf("%v", err)))
+		respondWithJSON(w, r, http.StatusBadRequest, errs.JSONErrors())
 		return
 	}
-	res := map[string]string{"token": t}
 
-	respondWithJSON(w, r, 200, res)
+	respondWithJSON(w, r, http.StatusOK, map[string]string{"token": t})
 }
 
 // login options request
@@ -116,8 +126,21 @@ func (a *App) register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// do validation by funcValidator
+	emailValidator := v.FromFunc(func(field v.Field) v.Errors {
+		val := field.ValuePtr.(*string)
+		matched, err := regexp.MatchString("(^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\\.[a-zA-Z0-9-.]+$)", *val)
+		if err != nil {
+			return v.NewErrors("email", v.ErrInvalid, fmt.Sprint(err))
+		}
+		if matched == false {
+			return v.NewErrors("email", v.ErrInvalid, "Wrong email")
+		}
+		return nil
+	})
+
 	errs := v.Validate(v.Schema{
-		v.F("email", &u.Email):       v.All(v.Nonzero("cannot be empty"), v.Len(4, 120, "length is not between 4 and 120")),
+		v.F("email", &u.Email):       v.All(v.Nonzero("cannot be empty"), v.Len(4, 120, "length is not between 4 and 120"), emailValidator),
 		v.F("password", &u.Password): v.All(v.Nonzero("cannot be empty"), v.Len(4, 120, "length is not between 8 and 120")),
 	})
 
