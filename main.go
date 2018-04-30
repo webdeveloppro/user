@@ -5,21 +5,22 @@ import (
 	"os"
 
 	"github.com/jackc/pgx"
+	u "github.com/webdeveloppro/user/pkg/user"
 )
 
 func main() {
 
-	host := os.Getenv("DB_HOST")
-	user := os.Getenv("DB_USERNAME")
+	dbhost := os.Getenv("DB_HOST")
+	dbuser := os.Getenv("DB_USERNAME")
 	dbpassword := os.Getenv("DB_PASSWORD")
 	dbname := os.Getenv("DB_NAME")
 
-	if host == "" {
+	if dbhost == "" {
 		log.Print("Empty host string, setup DB_HOST env")
-		host = "localhost"
+		dbhost = "localhost"
 	}
 
-	if user == "" {
+	if dbuser == "" {
 		log.Fatal("Empty user string, setup DB_USER env")
 		return
 	}
@@ -31,8 +32,8 @@ func main() {
 
 	connPoolConfig := pgx.ConnPoolConfig{
 		ConnConfig: pgx.ConnConfig{
-			Host:     host,
-			User:     user,
+			Host:     dbhost,
+			User:     dbuser,
 			Password: dbpassword,
 			Database: dbname,
 		},
@@ -45,8 +46,8 @@ func main() {
 	}
 	defer pg.Close()
 
-	storage := NewPostgres(pg)
+	storage := u.NewPostgres(pg)
 
-	app, _ := NewApp(storage)
-	app.Run(os.Getenv("PORT"))
+	app, _ := u.NewApp(storage)
+	app.Run(os.Getenv("HOST") + ":" + os.Getenv("PORT"))
 }
